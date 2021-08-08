@@ -1,0 +1,14 @@
+{
+  "name": "real-estate-nft",
+  "version": "1.0.0",
+  "description": "NFT based real estate tokenisation and management",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "David Ojimba",
+  "license": "ISC",
+  "devDependencies": {
+    "hardhat": "^2.6.0"
+  }
+}
