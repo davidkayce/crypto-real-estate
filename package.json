@@ -1,13 +1,24 @@
 {
-  "name": "real-estate-nft",
+  "name": "hardhat-hackathon-boilerplate",
   "version": "1.0.0",
-  "description": "NFT based real estate tokenisation and management",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "description": "A boilerplate repository to get you started with Hardhat and Ethereum development",
+  "directories": {
+    "test": "test"
   },
-  "author": "David Ojimba",
-  "license": "ISC",
+  "scripts": {
+    "test": "hardhat test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nomiclabs/hardhat-hackathon-boilerplate.git"
+  },
+  "keywords": [
+    "hardhat",
+    "ethereum",
+    "hackathon"
+  ],
+  "author": "Nomic Labs",
+  "license": "MIT",
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
     "@nomiclabs/hardhat-waffle": "^2.0.1",
