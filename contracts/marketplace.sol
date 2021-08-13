@@ -1,44 +1,7 @@
-pragma solidity ^0.5.0;
-
-import "openzeppelin-solidity/contracts/token/ERC20/ERC20.sol";
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
-
-
-/**
- * @title Real Estate Token
- * @author Alberto Cuesta Canada
- * @notice Implements a real estate tokenization contract with revenue distribution.
- */
 contract RealEstateToken is ERC20, Ownable {
     using SafeMath for uint256;
 
-    /**
-     * @notice We require to know who are all the stakeholders.
-     */
-    address[] internal stakeholders;
-
-    /**
-     * @notice The accumulated revenue for each stakeholder.
-     */
-    mapping(address => uint256) internal revenues;
-
-    /**
-     * @notice The funds in this contract that haven't been distributed yet.
-     */
-    uint256 internal accumulated;
-
-    /**
-     * @notice The constructor for the Real Estate Token. This contract relates
-     * to a unique real estate portfolio and each token minted is a share.
-     * @param _owner The address to receive all tokens on construction.
-     * @param _supply The amount of tokens to mint on construction.
-     */
-    constructor(address _owner, uint256 _supply)
-        public
-    {
-        _mint(_owner, _supply);
-    }
+ 
 
     /**
      * @notice Method to send Ether to this contract.
