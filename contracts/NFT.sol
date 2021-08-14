@@ -12,24 +12,27 @@ contract RealEstateNFT is ERC721 {
     Counters.Counter private _tokenIds;
 
     address manager;
+    int listingId;
 
     constructor(
-        string memory tokenName,
-        string memory symbol,
+        bytes32 memory tokenName,
+        bytes32 memory symbol,
         address _manager,
         address _owner,
-        string memory _tokenURI
+        bytes32 memory _tokenURI,
+        uint _listingId
     ) public ERC721(tokenName, symbol) {
         manager = _manager;
+        listingId = _listingId;
         mintAsset(_owner, _tokenURI);
     }
 
-    function mintAsset(address owner, string memory tokenURI)
+    function mintAsset(address owner, bytes32 memory tokenURI)
         public
         returns (uint256)
     {
         _tokenIds.increment();
-        uint256 assetId = _tokenIds.current();
+        int assetId = _tokenIds.current();
 
         _safeMint(owner, assetId);
         _setTokenURI(assetId, tokenURI);
