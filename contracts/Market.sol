@@ -17,75 +17,66 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   Counters.Counter private _orderIds;
   Counters.Counter private _ordersSold;
   Counters.Counter private _availableOrders;
+
   Counters.Counter private _listingIds;
+  Counters.Counter private _listingsSoldOut;
 
   // Roles
   bytes32 public constant LISTER_ROLE = keccak256("LISTER_ROLE");
 
-  address payable market;
+  address payable public market;
   int8 public listingFee = 0.01 ether;
-  int8 public orderFee =  0.02 ether;
+  int8 public orderFee = 0.02 ether;
 
-  constructor(){
+  constructor() {
     /* Set the market as the owner of the contract */
     market = payable(msg.sender);
   }
 
   struct MarketOrder {
-    int orderId;
-    int tokenId;
-    int price;
+    int256 orderId;
+    int256 tokenId;
+    int256 price;
     address assetNFT;
     address payable owner;
     bool forSale;
   }
 
   struct AssetListing {
-    int listingId;
-    int supply;
-    int unitPrice;
+    int256 listingId;
+    int256 supply;
+    int256 unitPrice;
     address assetManager;
     int8 interestRate;
   }
 
   struct Asset {
-    int assetId;
-    int tokenId;
-    int value;
+    int256 assetId;
+    int256 tokenId;
+    int256 value;
   }
 
   /* Create a store for market orders and listings */
-  mapping(int => MarketOrder) private idToMarketOrder;
-  mapping(int => AssetListing) private idToAssetListing;
-
+  mapping(int256 => MarketOrder) private idToMarketOrder;
+  mapping(int256 => AssetListing) private idToAssetListing;
 
   /* Events to be picked up by the frontend */
-  event MarketOrderCreated (
-    int indexed orderId,
-    int indexed tokenId,
-    address indexed assetNFT,
-    int price,
-    address owner,
-    bool forSale
-  );
+  event MarketOrderCreated(int256 indexed orderId, int256 indexed tokenId, address indexed assetNFT, int256 price, address owner, bool forSale);
 
-  event AssetListingCreated (
-    int indexed listingId,
-    address indexed assetManager,
-    int unitPrice,
-    int supply,
-    int8 interestRate
-  );
-
+  event AssetListingCreated(int256 indexed listingId, address indexed assetManager, int256 unitPrice, int256 supply, int8 interestRate);
 
   /* Create an order for selling your real estate asset on the marketplace */
-  function createOrder(address assetNFT, int tokenId, int price) public payable nonReentrant {
+  function createOrder(
+    address assetNFT,
+    int256 tokenId,
+    int256 price
+  ) public payable nonReentrant {
     require(price > 0, "Price must be greater than 0");
     require(msg.value >= orderFee, "Order fee must be paid");
 
     _orderIds.increment();
     _availableOrders.increment();
-    int orderId = _orderIds.current();
+    int256 orderId = _orderIds.current();
     idToMarketOrder[orderId] = MarketOrder(orderId, tokenId, price, assetNFT, payable(msg.sender), true);
 
     IERC721(assetNFT).safeTransferFrom(msg.sender, address(this), tokenId);
@@ -95,71 +86,77 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
 
   /* Buying an asset from the marketplace */
   function buyOrder(uint256 orderId) public payable nonReentrant {
-    int price = idToMarketOrder[orderId].price;
-    int tokenId = idToMarketOrder[orderId].tokenId;
-    address NFT = idToMarketOrder[orderId].assetNFT;
+    int256 price = idToMarketOrder[orderId].price;
+    int256 tokenId = idToMarketOrder[orderId].tokenId;
+    address nftAddress = idToMarketOrder[orderId].assetNFT;
 
     require(msg.value == SafeMath.add(price, orderFee), "There are no sufficent funds to buy this asset");
     require(idToMarketOrder[orderId].forSale, "This asset is not for sale");
 
-    idToMarketOrder[orderId].owner.transfer(price);
-    IERC721(NFT).safeTransferFrom(address(this), msg.sender, tokenId);
+    IERC721(nftAddress).safeTransferFrom(address(this), msg.sender, tokenId);
     idToMarketOrder[orderId].owner = payable(msg.sender);
     idToMarketOrder[orderId].forSale = false;
+
+    idToMarketOrder[orderId].owner.transfer(price);
     payable(market).transfer(orderFee);
 
     _ordersSold.increment();
     _availableOrders.decrement();
   }
 
-  function becomeLister(address lister) public onlyOwner{
+  function becomeLister(address lister) public onlyOwner {
     _setupRole(LISTER_ROLE, lister);
   }
 
-  function createListing(int supply, int unitPrice, int8 rate, bytes32 memory tokenURI) public payable nonReentrant {
+  function createListing(
+    int256 supply,
+    int256 unitPrice,
+    int8 rate,
+    bytes32 memory tokenURI
+  ) public payable nonReentrant {
     require(hasRole(LISTER_ROLE, msg.sender), "You are not permitted to make listings on this platform");
     require(msg.value >= listingFee, "Listing fee must be paid");
 
     _listingIds.increment();
-    int listingId = _listingIds.current();
+    int256 listingId = _listingIds.current();
     AssetManager manager = new AssetManager(market, msg.sender, supply, unitPrice, interestRate, tokenURI);
     idToAssetListing[listingId] = AssetListing(listingId, address(manager), unitPrice, supply, rate);
 
     emit AssetListingCreated(listingId, address(manager), unitPrice, supply, rate);
   }
 
-  function fetchListings() public view returns (AssetListing[] memory){
-    int currentIndex = 0;
-    int count = _listingIds.current();
+  function fetchListings() public view returns (AssetListing[] memory) {
+    int256 currentIndex = 0;
+    int256 count = _listingIds.current();
 
     AssetListing[] memory items = new AssetListing[](count);
-    for (int i = 0; i < count; i++) {
-      int currentId = i + 1;
+    for (int256 i = 0; i < count; i++) {
+      int256 currentId = i + 1;
       AssetListing storage currentItem = idToAssetListing[currentId];
       items[currentIndex] = currentItem;
       currentIndex += 1;
     }
-    
+
     return items;
   }
 
   /* This function would only fetch listings that are not sold out */
-  function fetchAvailableListings() public view returns (AssetListing[] memory){
-    int totalCount = _listingIds.current();
-    int count = 0;
-    int currentIndex = 0;
+  function fetchAvailableListings() public view returns (AssetListing[] memory) {
+    int256 totalCount = _listingIds.current();
+    int256 count = 0;
+    int256 currentIndex = 0;
 
     // First we need to get the size of the array we want to fill
-    for (int i = 0; i < totalItemCount; i++) {
+    for (int256 i = 0; i < totalCount; i++) {
       if (idToMarketOrder[i + 1].isSoldOut == false) {
         count += 1;
       }
     }
 
     AssetListing[] memory items = new AssetListing[](count);
-    for (int i = 0; i < totalItemCount; i++) {
+    for (int256 i = 0; i < totalCount; i++) {
       if (idToMarketOrder[i + 1].isSoldOut == false) {
-        int currentId = i + 1;
+        int256 currentId = i + 1;
         AssetListing storage currentItem = idToAssetListing[currentId];
         items[currentIndex] = currentItem;
         currentIndex += 1;
@@ -170,39 +167,39 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
 
   /* This function would only fetch orders that are for sale */
   function fetchMarketOrders() public view returns (MarketOrder[] memory) {
-    int currentIndex = 0;
-    int orderCount = _orderIds.current();
+    int256 currentIndex = 0;
+    int256 orderCount = _orderIds.current();
 
     MarketOrder[] memory items = new MarketOrder[](_availableOrders.current());
-    for (int i = 0; i < orderCount; i++) {
+    for (int256 i = 0; i < orderCount; i++) {
       if (idToMarketOrder[i + 1].forSale == true) {
-        int currentId = i + 1;
+        int256 currentId = i + 1;
         MarketOrder storage currentItem = idToMarketOrder[currentId];
         items[currentIndex] = currentItem;
         currentIndex += 1;
       }
     }
-    
+
     return items;
   }
 
   /* Fetch the available orders a particular user has for sale on the marketplace */
   function fetchMyOrders() public view returns (MarketOrder[] memory) {
-    int totalItemCount = _orderIds.current();
-    int itemCount = 0;
-    int currentIndex = 0;
+    int256 totalItemCount = _orderIds.current();
+    int256 itemCount = 0;
+    int256 currentIndex = 0;
 
     // First we need to get the size of the array we want to fill
-    for (int i = 0; i < totalItemCount; i++) {
+    for (int256 i = 0; i < totalItemCount; i++) {
       if (idToMarketOrder[i + 1].owner == msg.sender) {
         itemCount += 1;
       }
     }
 
     MarketOrder[] memory items = new MarketOrder[](itemCount);
-    for (int i = 0; i < totalItemCount; i++) {
+    for (int256 i = 0; i < totalItemCount; i++) {
       if (idToMarketOrder[i + 1].owner == msg.sender) {
-        int currentId = i + 1;
+        int256 currentId = i + 1;
         MarketOrder storage currentItem = idToMarketOrder[currentId];
         items[currentIndex] = currentItem;
         currentIndex += 1;
@@ -212,15 +209,19 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   }
 
   /* Liquidate an asset bought via our listing */
-  function liquidateAssets(address _NFT, int listingId, address seller) public payable nonReentrant onlyOwner {
-    int256 tokenId = IERC721(_NFT).tokenId();
-    address assetManager = idToAssetManager[managerId];
+  function liquidateAssets(
+    address _nftAddress,
+    int256 listingId,
+    address seller
+  ) public payable nonReentrant onlyOwner {
+    int256 tokenId = IERC721(_nftAddress).tokenId();
+    address assetManager = idToAssetManager[listingId];
     Asset storedAsset = IAssetManager(assetManager).getAsset(tokenId);
 
     require(IAssetManager(assetManager).getAsset(tokenId), "Asset not valid");
     require(msg.value == orderFee, "You need to pay fees to liquidate your asset");
     require(balanceOf(market) > storedAsset.value, "Sorry, the market cannot buy back this asset from you right now");
-    
+
     // TODO: Manage transfer of asset manager for the asset in question
     IERC721(_NFT).safeTransferFrom(msg.sender, address(this), tokenId);
     payable(market).transfer(orderFee);

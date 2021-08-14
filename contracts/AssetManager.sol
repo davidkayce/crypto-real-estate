@@ -16,104 +16,109 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   using SafeMath for uint256;
 
   Counters.Counter private _assetIds;
-  
-  /* Events to be picked up by the frontend */
-  address payable market;
-  address payable issuer;
+  Counters.Counter private _assetsSold;
 
-  int public assetSupply;
-  int public unitPrice;
-  int public unitsSold;
+  /* Events to be picked up by the frontend */
+  address payable public market;
+  address payable public issuer;
+
+  int256 public assetSupply;
+  int256 public unitPrice;
+  int256 public unitsSold;
   int8 public rate;
-  
-  constructor(address _market, address _issuer, uint256 _maxSupply, uint256 _unitPrice, uint256 _rate, bytes32 memory tokenURI) {
+
+  constructor(
+    address _market,
+    address _issuer,
+    uint256 _maxSupply,
+    uint256 _unitPrice,
+    uint256 _rate
+  ) {
     market = payable(_market);
     issuer = payable(_issuer);
     assetSupply = _maxSupply;
     unitPrice = _unitPrice;
     rate = _rate;
   }
-   
+
   struct Asset {
-    int assetId;
-    int tokenId;
-    int value;
+    int256 assetId;
+    int256 tokenId;
+    int256 value;
   }
 
-  event AssetCreated (
-    int indexed assetId,
-    int indexed tokenId,
-    int value
-  );
+  event AssetCreated(int256 indexed assetId, int256 indexed tokenId, int256 value);
 
-  event AssetValueUpdated (Asset asset);
+  event AssetValueUpdated(Asset asset);
 
-  mapping(int => Asset) private idToAsset;
+  event TransferMade(address indexed sender, int256 value);
+
+  mapping(int256 => Asset) private idToAsset;
   mapping(address => Asset) private tokenIdToAsset;
-  mapping(Asset => int) private depositTimeStamp;
-  mapping(Asset => int) private interestPaid;
+  mapping(Asset => int256) private depositTimeStamp;
+  mapping(Asset => int256) private interestPaid;
 
   /* Revenue on  asset yet to be distributed */
-  int internal accumulated = 0;
+  int256 internal accumulated = 0;
 
-  /* Function to fetch  a created asset */ 
-  function getAsset(int _tokenId) public view returns (Asset) {
+  /* Function to fetch  a created asset */
+  function getAsset(int256 _tokenId) public view returns (Asset) {
     require(tokenIdToAsset[_tokenId], "This asset does not exist");
     return tokenIdToAsset[_tokenId];
   }
 
-  function isStakeholder(int id) public view returns (bool, Asset) {
+  function isStakeholder(int256 id) public view returns (bool, Asset) {
     if (idToAsset[id]) return (true, idToAsset[id]);
-    return (false, Asset(0,0,0));
+    return (false, Asset(0, 0, 0));
   }
 
   function isSoldOut() public view returns (bool) {
     return (unitsSold >= assetSupply);
   }
 
-  /* Function to mint the NFT for the real esate asset */ 
-  function createAsset(uint256 units, address to) public returns (address) {
+  /* Function to mint the NFT for the real esate asset */
+  function createAsset(uint256 units) public returns (address) {
     int8 mintFee = 0.01 ether;
-    int totalPrice = SafeMath.mul(units, unitPrice) + mintFee;
+    int256 totalPrice = SafeMath.mul(units, unitPrice) + mintFee;
 
     require(assetSupply >= SafeMath.add(units, unitsSold), "Total supply of assets have been exceeded, you cannot purchase anymore of this asset");
     require(msg.value == totalPrice, "Please pay the asking price with fees");
 
-    payable(issuer).transfer(SafeMath.mul(units, unitPrice));
-    payable(market).transfer(mintFee);
-
     _assetIds.increment();
     unitsSold += units;
-    
-    int assetId = _assetIds.current();
-    int tokenId = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, msg.sender);
+    int256 assetId = _assetIds.current();
+    int256 tokenId = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, msg.sender);
 
     idToAsset[assetId] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice));
     tokenIdToAsset[tokenId] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice));
+    // This is being flagged because we are advised not to write time dependent logic
     depositTimeStamp[idToAsset[assetId]] = block.timestamp;
+
+    payable(issuer).transfer(SafeMath.mul(units, unitPrice));
+    payable(market).transfer(mintFee);
 
     emit AssetCreated(assetId, assetAddress);
   }
 
   /* This code is run anytime money is sent to this address */
-  receive() external payable  {
+  receive() external payable {
     require(msg.value > 0, "Non-zero revenue please");
     accumulated += msg.value;
     payable(market).transfer(msg.value);
+    emit TransferMade(msg.sender, msg.value);
   }
 
-  // Integrate chainlink API here to automatically 
+  // Integrate chainlink API here to automatically
   // distribute revenue to the assets
 
   /* Function to distribute revenues across the asset when the period matures*/
-  function distributeRevenue(i) internal onlyOwner {
-    
-    int numberofAssets = _assetIds.current();
-    int interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
+  function distributeRevenue() internal onlyOwner {
+    int256 numberofAssets = _assetIds.current();
+    int256 interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
 
     // Loop through assets and increment the value of each asset according to interest rate
-    for (int i = 0; i < numberofAssets; i++) {
-      int interest = SafeMath.mul(interestPerSecond, block.timestamp - depositTimeStamp[idToAsset[i]]);
+    for (int256 i = 0; i < numberofAssets; i++) {
+      int256 interest = SafeMath.mul(interestPerSecond, block.timestamp - depositTimeStamp[idToAsset[i]]);
       idToAsset[i].value = SafeMath.add(idToAsset[i].value, interest);
       emit AssetValueUpdated(idToAsset[i]);
     }
