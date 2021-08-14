@@ -54,8 +54,12 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
 
     event AssetValueUpdated(Asset asset);
 
+    event TransferMade(address indexed sender, int256 value);
+
     mapping(int256 => Asset) private idToAsset;
     mapping(address => Asset) private tokenIdToAsset;
+    mapping(Asset => int256) private depositTimeStamp;
+    mapping(Asset => int256) private interestPaid;
 
     /* Revenue on  asset yet to be distributed */
     int256 internal accumulated = 0;
@@ -69,6 +73,10 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
     function isStakeholder(int256 id) public view returns (bool, Asset) {
         if (idToAsset[id]) return (true, idToAsset[id]);
         return (false, Asset(0, 0, 0));
+    }
+
+    function isSoldOut() public view returns (bool) {
+        return (unitsSold >= assetSupply);
     }
 
     /* Function to mint the NFT for the real esate asset */
@@ -86,6 +94,7 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
         );
 
         _assetIds.increment();
+        unitsSold += units;
         int256 assetId = _assetIds.current();
         int256 tokenId = new RealEstateNFT(
             assetId,
@@ -105,6 +114,8 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
             tokenId,
             SafeMath.mul(units, unitPrice)
         );
+        // This is being flagged because we are advised not to write time dependent logic
+        depositTimeStamp[idToAsset[assetId]] = block.timestamp;
 
         payable(issuer).transfer(SafeMath.mul(units, unitPrice));
         payable(market).transfer(mintFee);
@@ -117,6 +128,7 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
         require(msg.value > 0, "Non-zero revenue please");
         accumulated += msg.value;
         payable(market).transfer(msg.value);
+        emit TransferMade(msg.sender, msg.value);
     }
 
     // Integrate chainlink API here to automatically
@@ -126,8 +138,14 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
     function distributeRevenue() internal onlyOwner {
         // Loop through assets and increment the value of each asset according to interest rate
         int256 numberofAssets = _assetIds.current();
+        int256 interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
 
+        // Loop through assets and increment the value of each asset according to interest rate
         for (int256 i = 0; i < numberofAssets; i++) {
+            int256 interest = SafeMath.mul(
+                interestPerSecond,
+                block.timestamp - depositTimeStamp[idToAsset[i]]
+            );
             idToAsset[i].value = SafeMath.add(
                 idToAsset[i].value,
                 SafeMath.mul(rate, idToAsset[i].value)
