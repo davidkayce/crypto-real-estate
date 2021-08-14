@@ -174,7 +174,7 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   }
 
   /* Liquidate an asset bought via our listing */
-  function liquidateAssets(address _NFT, int listingId) public payable nonReentrant {
+  function liquidateAssets(address _NFT, int listingId, address seller) public payable nonReentrant onlyOwner {
     int256 tokenId = IERC721(_NFT).tokenId();
     address assetManager = idToAssetManager[managerId];
     Asset storedAsset = IAssetManager(assetManager).getAsset(tokenId);
@@ -182,10 +182,10 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
     require(IAssetManager(assetManager).getAsset(tokenId), "Asset not valid");
     require(msg.value == orderFee, "You need to pay fees to liquidate your asset");
     require(balanceOf(market) > storedAsset.value, "Sorry, the market cannot buy back this asset from you right now");
-
+    
+    // TODO: Manage transfer of asset manager for the asset in question
     IERC721(_NFT).safeTransferFrom(msg.sender, address(this), tokenId);
     payable(market).transfer(orderFee);
-    payable(msg.sender).transfer(storedAsset.value);
+    payable(seller).transfer(storedAsset.value);
   }
-
 }
