@@ -17,9 +17,7 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   Counters.Counter private _orderIds;
   Counters.Counter private _ordersSold;
   Counters.Counter private _availableOrders;
-
   Counters.Counter private _listingIds;
-  Counters.Counter private _listingsSoldOut;
 
   // Roles
   bytes32 public constant LISTER_ROLE = keccak256("LISTER_ROLE");
@@ -129,7 +127,47 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
 
     emit AssetListingCreated(listingId, address(manager), unitPrice, supply, rate);
   }
-      
+
+  function fetchListings() public view returns (AssetListing[] memory){
+    int currentIndex = 0;
+    int count = _listingIds.current();
+
+    AssetListing[] memory items = new AssetListing[](count);
+    for (int i = 0; i < count; i++) {
+      int currentId = i + 1;
+      AssetListing storage currentItem = idToAssetListing[currentId];
+      items[currentIndex] = currentItem;
+      currentIndex += 1;
+    }
+    
+    return items;
+  }
+
+  /* This function would only fetch listings that are not sold out */
+  function fetchAvailableListings() public view returns (AssetListing[] memory){
+    int totalCount = _listingIds.current();
+    int count = 0;
+    int currentIndex = 0;
+
+    // First we need to get the size of the array we want to fill
+    for (int i = 0; i < totalItemCount; i++) {
+      if (idToMarketOrder[i + 1].isSoldOut == false) {
+        count += 1;
+      }
+    }
+
+    AssetListing[] memory items = new AssetListing[](count);
+    for (int i = 0; i < totalItemCount; i++) {
+      if (idToMarketOrder[i + 1].isSoldOut == false) {
+        int currentId = i + 1;
+        AssetListing storage currentItem = idToAssetListing[currentId];
+        items[currentIndex] = currentItem;
+        currentIndex += 1;
+      }
+    }
+    return items;
+  }
+
   /* This function would only fetch orders that are for sale */
   function fetchMarketOrders() public view returns (MarketOrder[] memory) {
     int currentIndex = 0;
