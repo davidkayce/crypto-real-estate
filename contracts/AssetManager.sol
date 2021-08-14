@@ -17,7 +17,6 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
 
   Counters.Counter private _assetIds;
   Counters.Counter private _assetsSold;
-  int256 public unitsSold;
 
   /* Events to be picked up by the frontend */
   address payable public market;
@@ -25,6 +24,7 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
 
   int256 public assetSupply;
   int256 public unitPrice;
+  int256 public unitsSold;
   int8 public rate;
 
   constructor(
@@ -113,7 +113,6 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
 
   /* Function to distribute revenues across the asset when the period matures*/
   function distributeRevenue() internal onlyOwner {
-    // Loop through assets and increment the value of each asset according to interest rate
     int256 numberofAssets = _assetIds.current();
     int256 interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
 

@@ -209,9 +209,13 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   }
 
   /* Liquidate an asset bought via our listing */
-  function liquidateAssets(address _nftAddress, address seller) public payable nonReentrant onlyOwner {
+  function liquidateAssets(
+    address _nftAddress,
+    int256 listingId,
+    address seller
+  ) public payable nonReentrant onlyOwner {
     int256 tokenId = IERC721(_nftAddress).tokenId();
-    address assetManager = idToAssetManager[managerId];
+    address assetManager = idToAssetManager[listingId];
     Asset storedAsset = IAssetManager(assetManager).getAsset(tokenId);
 
     require(IAssetManager(assetManager).getAsset(tokenId), "Asset not valid");

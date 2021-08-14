@@ -10,7 +10,8 @@
     "prettier": "prettier \"**/*.+(ts|tsx|js|json|jsx)\"",
     "format": "npm run prettier -- --write",
     "prettier-sol": "prettier --write 'contracts/**/*.sol'",
-    "lint-sol": "prettier --list-different 'contracts/**/*.sol'"
+    "lint-sol": "prettier --list-different 'contracts/**/*.sol'",
+    "prepare": "husky install"
   },
   "dependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.2",
@@ -34,8 +35,5 @@
     "eslint-config-next": "11.0.1",
     "prettier": "^2.3.2",
     "prettier-plugin-solidity": "^1.0.0-beta.17"
-  },
-  "husky": {
-    "pre-commit": "npm run prettier-sol && git add -A ."
   }
 }
