@@ -16,7 +16,7 @@ import "hardhat/console.sol";
 contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   /* The  asset mamager is responsible for setting up the assets, updating value and liquidating assets */
   using Counters for Counters.Counter;
-  using SafeMath for uint256;
+  using SafeMath for int256;
 
   Counters.Counter private _assetIds;
   Counters.Counter private _assetsSold;
@@ -25,17 +25,17 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   address payable public market;
   address payable public issuer;
 
-  uint256 public assetSupply;
-  uint256 public unitPrice;
-  uint256 public unitsSold;
-  int8 public rate;
+  int256 public assetSupply;
+  int256 public unitPrice;
+  int256 public unitsSold;
+  int256 public rate;
 
   constructor(
     address _market,
     address _issuer,
-    uint256 _maxSupply,
-    uint256 _unitPrice,
-    int8 _rate
+    int256 _maxSupply,
+    int256 _unitPrice,
+    int256 _rate
   ) {
     market = payable(_market);
     issuer = payable(_issuer);
@@ -45,26 +45,26 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   }
 
   struct Asset {
-    uint256 assetId;
-    uint256 tokenId;
-    uint256 value;
+    int256 assetId;
+    int256 tokenId;
+    int256 value;
     address assetAddress;
-    uint256 units;
+    int256 units;
   }
 
-  event AssetCreated(uint256 indexed assetId, uint256 indexed tokenId, uint256 value, address indexed assetAddress);
+  event AssetCreated(int256 indexed assetId, int256 indexed tokenId, int256 value, address indexed assetAddress);
 
   event AssetValueUpdated(Asset asset);
 
-  event TransferMade(address indexed sender, uint256 value);
+  event TransferMade(address indexed sender, int256 value);
 
-  mapping(uint256 => Asset) private idToAsset;
+  mapping(int256 => Asset) private idToAsset;
   mapping(address => Asset) private nftAddressToAsset;
-  mapping(uint256 => uint256) private depositTimeStamp;
-  mapping(uint256 => uint256) private interestPaid;
+  mapping(int256 => int256) private depositTimeStamp;
+  mapping(int256 => int256) private interestPaid;
 
   /* Revenue on  asset yet to be distributed */
-  uint256 internal accumulated = 0;
+  int256 internal accumulated = 0;
 
   /* Function to fetch  a created asset */
   function getAsset(address assetAddress) public view returns (Asset memory) {
@@ -72,7 +72,7 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
     return nftAddressToAsset[assetAddress];
   }
 
-  function isStakeholder(uint256 id) public view returns (bool, Asset memory) {
+  function isStakeholder(int256 id) public view returns (bool, Asset memory) {
     if (idToAsset[id]) return (true, idToAsset[id]);
     return (false, Asset(0, 0, 0));
   }
@@ -83,17 +83,17 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
 
   /* Function to mint the NFT for the real esate asset */
   /* This is only called when the original listing wants to be bought */
-  function createAsset(uint256 units, address assetOwner) public payable override nonReentrant returns (address) {
+  function createAsset(int256 units, address assetOwner) public payable nonReentrant returns (address) {
     int8 mintFee = 0.01 ether;
-    uint256 totalPrice = SafeMath.mul(units, unitPrice) + mintFee;
+    int256 totalPrice = SafeMath.mul(units, unitPrice) + mintFee;
 
     require(assetSupply >= SafeMath.add(units, unitsSold), "Total supply of assets have been exceeded, you cannot purchase anymore of this asset");
     require(msg.value == totalPrice, "Please pay the asking price with fees");
 
     _assetIds.increment();
     unitsSold += units;
-    uint256 assetId = _assetIds.current();
-    (uint256 tokenId, address nftAddress) = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, assetOwner);
+    int256 assetId = _assetIds.current();
+    (int256 tokenId, address nftAddress) = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, assetOwner);
 
     idToAsset[assetId] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice), nftAddress, units);
     nftAddressToAsset[nftAddress] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice), nftAddress, units);
@@ -121,12 +121,12 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
 
   /* Function to distribute revenues across the asset when the period matures*/
   function distributeRevenue() internal onlyOwner {
-    uint256 numberofAssets = _assetIds.current();
-    uint256 interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
+    int256 numberofAssets = _assetIds.current();
+    int256 interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
 
     // Loop through assets and increment the value of each asset according to interest rate
-    for (uint256 i = 0; i < numberofAssets; i++) {
-      uint256 interest = SafeMath.mul(interestPerSecond, block.timestamp - depositTimeStamp[idToAsset[i]]);
+    for (int256 i = 0; i < numberofAssets; i++) {
+      int256 interest = SafeMath.mul(interestPerSecond, block.timestamp - depositTimeStamp[idToAsset[i]]);
       idToAsset[i].value = SafeMath.add(idToAsset[i].value, interest);
       emit AssetValueUpdated(idToAsset[i]);
     }
