@@ -25,16 +25,16 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   address payable public market;
   address payable public issuer;
 
-  int256 public assetSupply;
-  int256 public unitPrice;
-  int256 public unitsSold;
+  uint256 public assetSupply;
+  uint256 public unitPrice;
+  uint256 public unitsSold;
   int8 public rate;
 
   constructor(
     address _market,
     address _issuer,
-    int256 _maxSupply,
-    int256 _unitPrice,
+    uint256 _maxSupply,
+    uint256 _unitPrice,
     int8 _rate
   ) {
     market = payable(_market);
@@ -45,26 +45,26 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   }
 
   struct Asset {
-    int256 assetId;
-    int256 tokenId;
-    int256 value;
+    uint256 assetId;
+    uint256 tokenId;
+    uint256 value;
     address assetAddress;
-    int256 units;
+    uint256 units;
   }
 
-  event AssetCreated(int256 indexed assetId, int256 indexed tokenId, int256 value, address indexed assetAddress);
+  event AssetCreated(uint256 indexed assetId, uint256 indexed tokenId, uint256 value, address indexed assetAddress);
 
   event AssetValueUpdated(Asset asset);
 
-  event TransferMade(address indexed sender, int256 value);
+  event TransferMade(address indexed sender, uint256 value);
 
-  mapping(int256 => Asset) private idToAsset;
+  mapping(uint256 => Asset) private idToAsset;
   mapping(address => Asset) private nftAddressToAsset;
-  mapping(int256 => int256) private depositTimeStamp;
-  mapping(int256 => int256) private interestPaid;
+  mapping(uint256 => uint256) private depositTimeStamp;
+  mapping(uint256 => uint256) private interestPaid;
 
   /* Revenue on  asset yet to be distributed */
-  int256 internal accumulated = 0;
+  uint256 internal accumulated = 0;
 
   /* Function to fetch  a created asset */
   function getAsset(address assetAddress) public view returns (Asset memory) {
@@ -72,7 +72,7 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
     return nftAddressToAsset[assetAddress];
   }
 
-  function isStakeholder(int256 id) public view returns (bool, Asset memory) {
+  function isStakeholder(uint256 id) public view returns (bool, Asset memory) {
     if (idToAsset[id]) return (true, idToAsset[id]);
     return (false, Asset(0, 0, 0));
   }
@@ -85,15 +85,15 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   /* This is only called when the original listing wants to be bought */
   function createAsset(uint256 units, address assetOwner) public payable override nonReentrant returns (address) {
     int8 mintFee = 0.01 ether;
-    int256 totalPrice = SafeMath.mul(units, unitPrice) + mintFee;
+    uint256 totalPrice = SafeMath.mul(units, unitPrice) + mintFee;
 
     require(assetSupply >= SafeMath.add(units, unitsSold), "Total supply of assets have been exceeded, you cannot purchase anymore of this asset");
     require(msg.value == totalPrice, "Please pay the asking price with fees");
 
     _assetIds.increment();
     unitsSold += units;
-    int256 assetId = _assetIds.current();
-    (int256 tokenId, address nftAddress) = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, assetOwner);
+    uint256 assetId = _assetIds.current();
+    (uint256 tokenId, address nftAddress) = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, assetOwner);
 
     idToAsset[assetId] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice), nftAddress, units);
     nftAddressToAsset[nftAddress] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice), nftAddress, units);
@@ -121,12 +121,12 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
 
   /* Function to distribute revenues across the asset when the period matures*/
   function distributeRevenue() internal onlyOwner {
-    int256 numberofAssets = _assetIds.current();
-    int256 interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
+    uint256 numberofAssets = _assetIds.current();
+    uint256 interestPerSecond = SafeMath.mul(unitPrice, (rate / 31577600)); // Secs in a year
 
     // Loop through assets and increment the value of each asset according to interest rate
-    for (int256 i = 0; i < numberofAssets; i++) {
-      int256 interest = SafeMath.mul(interestPerSecond, block.timestamp - depositTimeStamp[idToAsset[i]]);
+    for (uint256 i = 0; i < numberofAssets; i++) {
+      uint256 interest = SafeMath.mul(interestPerSecond, block.timestamp - depositTimeStamp[idToAsset[i]]);
       idToAsset[i].value = SafeMath.add(idToAsset[i].value, interest);
       emit AssetValueUpdated(idToAsset[i]);
     }
