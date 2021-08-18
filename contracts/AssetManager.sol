@@ -5,10 +5,13 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IAssetManager.sol";
 import "./NFT.sol";
 
 import "hardhat/console.sol";
+
+// TODO: create a buyAsset function to be called when a seller buys an order;
 
 contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   /* The  asset mamager is responsible for setting up the assets, updating value and liquidating assets */
@@ -30,9 +33,9 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   constructor(
     address _market,
     address _issuer,
-    uint256 _maxSupply,
-    uint256 _unitPrice,
-    uint256 _rate
+    int256 _maxSupply,
+    int256 _unitPrice,
+    int8 _rate
   ) {
     market = payable(_market);
     issuer = payable(_issuer);
@@ -45,29 +48,31 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
     int256 assetId;
     int256 tokenId;
     int256 value;
+    address assetAddress;
+    int256 units;
   }
 
-  event AssetCreated(int256 indexed assetId, int256 indexed tokenId, int256 value);
+  event AssetCreated(int256 indexed assetId, int256 indexed tokenId, int256 value, address indexed assetAddress);
 
   event AssetValueUpdated(Asset asset);
 
   event TransferMade(address indexed sender, int256 value);
 
   mapping(int256 => Asset) private idToAsset;
-  mapping(address => Asset) private tokenIdToAsset;
-  mapping(Asset => int256) private depositTimeStamp;
-  mapping(Asset => int256) private interestPaid;
+  mapping(address => Asset) private nftAddressToAsset;
+  mapping(int256 => int256) private depositTimeStamp;
+  mapping(int256 => int256) private interestPaid;
 
   /* Revenue on  asset yet to be distributed */
   int256 internal accumulated = 0;
 
   /* Function to fetch  a created asset */
-  function getAsset(int256 _tokenId) public view returns (Asset) {
-    require(tokenIdToAsset[_tokenId], "This asset does not exist");
-    return tokenIdToAsset[_tokenId];
+  function getAsset(address assetAddress) public view returns (Asset memory) {
+    require(nftAddressToAsset[assetAddress], "This asset does not exist");
+    return nftAddressToAsset[assetAddress];
   }
 
-  function isStakeholder(int256 id) public view returns (bool, Asset) {
+  function isStakeholder(int256 id) public view returns (bool, Asset memory) {
     if (idToAsset[id]) return (true, idToAsset[id]);
     return (false, Asset(0, 0, 0));
   }
@@ -77,7 +82,8 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
   }
 
   /* Function to mint the NFT for the real esate asset */
-  function createAsset(uint256 units) public returns (address) {
+  /* This is only called when the original listing wants to be bought */
+  function createAsset(uint256 units, address assetOwner) public payable override nonReentrant returns (address) {
     int8 mintFee = 0.01 ether;
     int256 totalPrice = SafeMath.mul(units, unitPrice) + mintFee;
 
@@ -87,17 +93,19 @@ contract AssetManager is ReentrancyGuard, IAssetManager, Ownable {
     _assetIds.increment();
     unitsSold += units;
     int256 assetId = _assetIds.current();
-    int256 tokenId = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, msg.sender);
+    (int256 tokenId, address nftAddress) = new RealEstateNFT(assetId, assetSupply, unitPrice, rate, assetOwner);
 
-    idToAsset[assetId] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice));
-    tokenIdToAsset[tokenId] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice));
+    idToAsset[assetId] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice), nftAddress, units);
+    nftAddressToAsset[nftAddress] = Asset(assetId, tokenId, SafeMath.mul(units, unitPrice), nftAddress, units);
     // This is being flagged because we are advised not to write time dependent logic
     depositTimeStamp[idToAsset[assetId]] = block.timestamp;
 
     payable(issuer).transfer(SafeMath.mul(units, unitPrice));
     payable(market).transfer(mintFee);
 
-    emit AssetCreated(assetId, assetAddress);
+    emit AssetCreated(assetId, tokenId, assetSupply, nftAddress);
+
+    return nftAddress;
   }
 
   /* This code is run anytime money is sent to this address */

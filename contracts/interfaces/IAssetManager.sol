@@ -10,5 +10,5 @@ interface IAssetManager {
   /**
    * @dev Function to mint the NFT for the real esate asset.
    */
-  function createAsset(uint256 units, address to) external payable returns (bytes32);
+  function createAsset(uint256 units, address to) external payable returns (address);
 }
