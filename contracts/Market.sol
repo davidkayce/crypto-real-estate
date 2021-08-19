@@ -10,6 +10,10 @@ import "./AssetManager.sol";
 
 import "hardhat/console.sol";
 
+//TODO @dev: Add a function to cancel an order
+//TODO @dev: Add a function to cancel a listing
+//TODO @dev: Add a function to buy an asset.
+
 contract Market is ReentrancyGuard, AccessControl, Ownable {
   using Counters for Counters.Counter;
   using SafeMath for uint256;
@@ -28,11 +32,6 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   int8 public listingFee = 0.01 ether;
   int8 public orderFee = 0.02 ether;
 
-  constructor() {
-    /* Set the market as the owner of the contract */
-    market = payable(msg.sender);
-  }
-
   struct MarketOrder {
     int256 orderId;
     int256 tokenId;
@@ -45,6 +44,7 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   struct AssetListing {
     int256 listingId;
     int256 supply;
+    int256 totalSupply;
     int256 unitPrice;
     address assetManager;
     int8 interestRate;
@@ -59,20 +59,29 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   /* Create a store for market orders and listings */
   mapping(int256 => MarketOrder) private idToMarketOrder;
   mapping(int256 => AssetListing) private idToAssetListing;
+  mapping(int256 => address[]) private listingIdToNftAddresses;
+  mapping(address => address[]) private ownerIdToNftAddresses;
 
   /* Events to be picked up by the frontend */
   event MarketOrderCreated(int256 indexed orderId, int256 indexed tokenId, address indexed assetNFT, int256 price, address owner, bool forSale);
 
   event AssetListingCreated(int256 indexed listingId, address indexed assetManager, int256 unitPrice, int256 supply, int8 interestRate);
 
+  constructor() {
+    /* Set the market as the owner of the contract */
+    market = payable(msg.sender);
+  }
+
   /* Create an order for selling your real estate asset on the marketplace */
   function createOrder(
     address assetNFT,
-    int256 tokenId,
-    int256 price
+    int256 price,
+    uint256 tokenId
   ) public payable nonReentrant {
     require(price > 0, "Price must be greater than 0");
     require(msg.value >= orderFee, "Order fee must be paid");
+
+    // TODO @Dev: Check all the assets to find the tokenId. Do this by referencing the asset manager;
 
     _orderIds.increment();
     _availableOrders.increment();
@@ -111,18 +120,38 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
   function createListing(
     int256 supply,
     int256 unitPrice,
-    int8 rate,
-    bytes32 memory tokenURI
+    int8 rate
   ) public payable nonReentrant {
     require(hasRole(LISTER_ROLE, msg.sender), "You are not permitted to make listings on this platform");
     require(msg.value >= listingFee, "Listing fee must be paid");
 
     _listingIds.increment();
     int256 listingId = _listingIds.current();
-    AssetManager manager = new AssetManager(market, msg.sender, supply, unitPrice, interestRate, tokenURI);
-    idToAssetListing[listingId] = AssetListing(listingId, address(manager), unitPrice, supply, rate);
+    AssetManager manager = new AssetManager(market, msg.sender, supply, unitPrice, rate);
+    idToAssetListing[listingId] = AssetListing(listingId, supply, supply, unitPrice, address(manager), rate);
 
     emit AssetListingCreated(listingId, address(manager), unitPrice, supply, rate);
+  }
+
+  function buyListingAsset(uint256 listingId) public payable nonReentrant {
+    require(msg.value >= orderFee, "Order fee must be paid");
+    AssetListing listing = idToAssetListing[listingId];
+    require(listing, "This listing does not exist");
+    require(listing.supply > 0, "There are no more assets to sell");
+    require(msg.value > SafeMath.add(listing.unitPrice, orderFee), "Funds must be greater than the unit price");
+
+    int256 unitsBought = SafeMath.div(msg.value, listing.unitPrice);
+
+    address assetAddress = IAssetManager(listing.assetManager).createAsset(msg.value)(unitsBought, msg.sender);
+
+    uint256 newListingSupply = SafeMath.sub(listing.supply, unitsBought);
+
+    listing.supply = newListingSupply;
+
+    listingIdToNftAddresses[listingId].push(assetAddress);
+    ownerIdToNftAddresses[msg.seNder].push(assetAddress);
+
+    return assetAddress;
   }
 
   function fetchListings() public view returns (AssetListing[] memory) {
@@ -132,7 +161,7 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
     AssetListing[] memory items = new AssetListing[](count);
     for (int256 i = 0; i < count; i++) {
       int256 currentId = i + 1;
-      AssetListing storage currentItem = idToAssetListing[currentId];
+      AssetListing currentItem = idToAssetListing[currentId];
       items[currentIndex] = currentItem;
       currentIndex += 1;
     }
@@ -148,7 +177,9 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
 
     // First we need to get the size of the array we want to fill
     for (int256 i = 0; i < totalCount; i++) {
-      if (idToMarketOrder[i + 1].isSoldOut == false) {
+      AssetListing current = idToAssetListing[i + 1];
+      bool soldOut = IAssetManager(current.assetManager).isSoldOut();
+      if (!soldOut) {
         count += 1;
       }
     }
@@ -157,11 +188,12 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
     for (int256 i = 0; i < totalCount; i++) {
       if (idToMarketOrder[i + 1].isSoldOut == false) {
         int256 currentId = i + 1;
-        AssetListing storage currentItem = idToAssetListing[currentId];
+        AssetListing currentItem = idToAssetListing[currentId];
         items[currentIndex] = currentItem;
         currentIndex += 1;
       }
     }
+
     return items;
   }
 
@@ -215,7 +247,7 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
     address seller
   ) public payable nonReentrant onlyOwner {
     int256 tokenId = IERC721(_nftAddress).tokenId();
-    address assetManager = idToAssetManager[listingId];
+    address assetManager = idToAssetListing[listingId].assetManager;
     Asset storedAsset = IAssetManager(assetManager).getAsset(tokenId);
 
     require(IAssetManager(assetManager).getAsset(tokenId), "Asset not valid");
@@ -223,7 +255,7 @@ contract Market is ReentrancyGuard, AccessControl, Ownable {
     require(balanceOf(market) > storedAsset.value, "Sorry, the market cannot buy back this asset from you right now");
 
     // TODO: Manage transfer of asset manager for the asset in question
-    IERC721(_NFT).safeTransferFrom(msg.sender, address(this), tokenId);
+    IERC721(_nftAddress).safeTransferFrom(msg.sender, address(this), tokenId);
     payable(market).transfer(orderFee);
     payable(seller).transfer(storedAsset.value);
   }
